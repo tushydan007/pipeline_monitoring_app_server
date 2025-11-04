@@ -66,10 +66,28 @@ class UserSerializer(DjoserUserSerializer):
     """Extended User serializer with profile and preferences"""
     profile = UserProfileSerializer(read_only=True)
     preferences = UserPreferenceSerializer(read_only=True)
+    
+    # Explicitly override User model fields to ensure they're included and writable
+    username = serializers.CharField(required=False)
+    email = serializers.EmailField(required=False)
+    first_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    last_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta(DjoserUserSerializer.Meta):
-        fields = DjoserUserSerializer.Meta.fields + ('profile', 'preferences')
-        read_only_fields = DjoserUserSerializer.Meta.read_only_fields
+        # Explicitly define all fields to ensure they're included in response
+        fields = [
+            'id',
+            'username',
+            'email',
+            'first_name',
+            'last_name',
+            'is_active',
+            'date_joined',
+            'profile',
+            'preferences',
+        ]
+        # Only id, date_joined, profile, and preferences are read-only
+        read_only_fields = ['id', 'date_joined', 'profile', 'preferences']
 
 
 class UserCreateSerializer(DjoserUserCreateSerializer):

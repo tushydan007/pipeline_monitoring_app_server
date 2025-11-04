@@ -8,6 +8,7 @@ from rest_framework_simplejwt.views import (
     TokenVerifyView,
 )
 from user.jwt_serializers import CustomTokenObtainPairSerializer
+from .health import health_check
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -15,6 +16,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/health/', health_check, name='health-check'),
     path('api/auth/', include('djoser.urls')),
     path('api/auth/jwt/create/', CustomTokenObtainPairView.as_view(), name='jwt-create'),
     path('api/auth/jwt/refresh/', TokenRefreshView.as_view(), name='jwt-refresh'),
