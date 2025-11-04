@@ -1,0 +1,33 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+djangorestframework = "*"
+djoser = "*"
+django-cors-headers = "*"
+geopy = "*"
+psycopg2-binary = "*"
+gunicorn = "*"
+django = "*"
+djangorestframework-simplejwt = "*"
+python-dotenv = "*"
+django-celery-beat = "*"
+redis = "*"
+celery = "*"
+scipy = "*"
+pandas = "*"
+opencv-python-headless = "*"
+numpy = "*"
+pillow = "*"
+scikit-image = "*"
+rasterio = "*"
+shapely = "*"
+geopandas = "*"
+fiona = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.11"

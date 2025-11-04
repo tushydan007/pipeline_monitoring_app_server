@@ -1,0 +1,120 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+README.md
+BACKEND_DEPENDENCIES.md
+docs/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+env.bak/
+venv.bak/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+
+# Environment files (should be passed as env vars in Docker)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Database files (not needed in Docker)
+*.sqlite
+*.sqlite3
+*.db
+db.sqlite3
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+*.bak
+*.backup
+
+# Development files
+local_settings.py
+settings_local.py
+*.local
+
+# Media files (will be mounted as volume or generated at runtime)
+/media/*
+!/media/.gitkeep
+
+# Static files (will be collected in Dockerfile)
+/staticfiles/*
+!/staticfiles/.gitkeep
+
+# Pipfile (dependencies are in requirements.txt)
+Pipfile
+Pipfile.lock
+
+# Docker files themselves
+Dockerfile
+docker-compose.yml
+docker-compose.*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+
+# Build artifacts
+build/
+dist/
+*.whl
+*.tar.gz
+
