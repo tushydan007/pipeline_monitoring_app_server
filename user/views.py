@@ -32,6 +32,37 @@ class UserViewSet(DjoserUserViewSet):
             return DummySerializer()
         return super().get_serializer(*args, **kwargs)
     
+    def perform_create(self, serializer):
+        """
+        Override perform_create to ensure username is always present before saving.
+        This is called by Djoser's create() method.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error("=== CUSTOM UserViewSet.perform_create() CALLED ===")
+        
+        # Get validated_data from serializer
+        if hasattr(serializer, 'validated_data') and serializer.validated_data:
+            validated_data = serializer.validated_data
+            logger.error(f"validated_data keys: {list(validated_data.keys())}")
+            
+            # Ensure username is present
+            email = validated_data.get('email', '')
+            if not validated_data.get('username') or validated_data.get('username', '').strip() == '':
+                # Generate username from email if missing
+                username = email.split('@')[0]
+                base_username = username
+                counter = 1
+                while User.objects.filter(username=username).exists():
+                    username = f"{base_username}{counter}"
+                    counter += 1
+                validated_data['username'] = username
+                serializer.validated_data['username'] = username
+                logger.error(f"Generated username in ViewSet: {username}")
+        
+        # Call parent's perform_create which will call serializer.save()
+        return super().perform_create(serializer)
+    
     @action(
         detail=False,
         methods=['get', 'put', 'patch', 'delete'],
