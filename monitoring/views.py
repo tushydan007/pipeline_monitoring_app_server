@@ -241,39 +241,119 @@ class SatelliteImageViewSet(viewsets.ModelViewSet):
         
         try:
             with rasterio.open(tiff_path) as src:
+                # Get nodata value from the source
+                nodata = src.nodata
+                
+                # Helper function to create mask for no-data values
+                def create_nodata_mask(band_array, nodata_value):
+                    """Create a mask for no-data pixels"""
+                    if nodata_value is None:
+                        # If no nodata value is set, only filter out obviously invalid values
+                        # (NaN, infinite, or extremely negative values)
+                        # Note: We don't filter zeros here as 0 can be a valid pixel value
+                        mask = np.isfinite(band_array) & (band_array > -1e10)
+                        return mask
+                    else:
+                        # Check for exact nodata value match
+                        if np.isnan(nodata_value):
+                            # If nodata is NaN, check for NaN pixels
+                            return np.isfinite(band_array)
+                        else:
+                            # For numeric nodata values, use exact match
+                            # Use small tolerance for floating point comparison
+                            if isinstance(nodata_value, (float, np.floating)):
+                                return ~np.isclose(band_array, nodata_value, rtol=1e-5, atol=1e-8, equal_nan=False)
+                            else:
+                                return band_array != nodata_value
+                
+                # Helper function to normalize band excluding no-data values
+                def normalize_band(band_array, nodata_mask):
+                    """Normalize band to 0-255, excluding no-data pixels"""
+                    # Get valid (non-nodata) pixels
+                    valid_pixels = band_array[nodata_mask]
+                    
+                    if len(valid_pixels) == 0:
+                        # If all pixels are no-data, return zeros
+                        return np.zeros_like(band_array, dtype=np.uint8)
+                    
+                    # Calculate min/max only from valid pixels
+                    band_min = valid_pixels.min()
+                    band_max = valid_pixels.max()
+                    
+                    # Handle case where all valid pixels have the same value
+                    if band_max == band_min:
+                        normalized = np.zeros_like(band_array, dtype=np.uint8)
+                        normalized[nodata_mask] = 128  # Set valid pixels to mid-gray
+                        return normalized
+                    
+                    # Normalize all pixels
+                    normalized = ((band_array - band_min) / (band_max - band_min) * 255).astype(np.uint8)
+                    
+                    # Set no-data pixels to 0 (will be made transparent via alpha channel)
+                    normalized[~nodata_mask] = 0
+                    
+                    return normalized
+                
                 # Read image data
                 if src.count >= 3:
                     # RGB image
                     red = src.read(1)
                     green = src.read(2)
                     blue = src.read(3)
-                    # Normalize to 0-255
-                    red_norm = ((red - red.min()) / (red.max() - red.min() + 1e-8) * 255).astype(np.uint8)
-                    green_norm = ((green - green.min()) / (green.max() - green.min() + 1e-8) * 255).astype(np.uint8)
-                    blue_norm = ((blue - blue.min()) / (blue.max() - blue.min() + 1e-8) * 255).astype(np.uint8)
+                    
+                    # Create combined mask (pixel is valid if all bands are valid)
+                    red_mask = create_nodata_mask(red, nodata)
+                    green_mask = create_nodata_mask(green, nodata)
+                    blue_mask = create_nodata_mask(blue, nodata)
+                    combined_mask = red_mask & green_mask & blue_mask
+                    
+                    # Normalize each band excluding no-data values
+                    red_norm = normalize_band(red, combined_mask)
+                    green_norm = normalize_band(green, combined_mask)
+                    blue_norm = normalize_band(blue, combined_mask)
+                    
+                    # Create RGB array
                     rgb_array = np.dstack([red_norm, green_norm, blue_norm])
+                    
+                    # Create alpha channel (255 for valid pixels, 0 for no-data)
+                    alpha = (combined_mask.astype(np.uint8) * 255)
+                    
                 elif src.count == 1:
                     # Grayscale image - convert to RGB
                     gray = src.read(1)
-                    gray_norm = ((gray - gray.min()) / (gray.max() - gray.min() + 1e-8) * 255).astype(np.uint8)
+                    gray_mask = create_nodata_mask(gray, nodata)
+                    
+                    gray_norm = normalize_band(gray, gray_mask)
                     rgb_array = np.dstack([gray_norm, gray_norm, gray_norm])
+                    
+                    # Create alpha channel
+                    alpha = (gray_mask.astype(np.uint8) * 255)
                 else:
                     # Use first band
                     band = src.read(1)
-                    band_norm = ((band - band.min()) / (band.max() - band.min() + 1e-8) * 255).astype(np.uint8)
+                    band_mask = create_nodata_mask(band, nodata)
+                    
+                    band_norm = normalize_band(band, band_mask)
                     rgb_array = np.dstack([band_norm, band_norm, band_norm])
+                    
+                    # Create alpha channel
+                    alpha = (band_mask.astype(np.uint8) * 255)
+                
+                # Add alpha channel to create RGBA array
+                rgba_array = np.dstack([rgb_array, alpha])
                 
                 # Resize if too large (max 2000px on longest side)
                 max_dimension = 2000
-                height, width = rgb_array.shape[:2]
+                height, width = rgba_array.shape[:2]
                 if width > max_dimension or height > max_dimension:
                     scale = max_dimension / max(width, height)
                     new_width = int(width * scale)
                     new_height = int(height * scale)
-                    rgb_array = np.array(PILImage.fromarray(rgb_array).resize((new_width, new_height), PILImage.Resampling.LANCZOS))
+                    # Resize RGBA array
+                    rgba_array = np.array(PILImage.fromarray(rgba_array).resize((new_width, new_height), PILImage.Resampling.LANCZOS))
                 
-                # Convert to PIL Image and then to PNG
-                img = PILImage.fromarray(rgb_array)
+                # Convert to PIL Image with alpha channel (RGBA mode)
+                img = PILImage.fromarray(rgba_array, mode='RGBA')
                 buffer = BytesIO()
                 img.save(buffer, format='PNG')
                 buffer.seek(0)
