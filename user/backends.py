@@ -10,19 +10,17 @@ class EmailOrUsernameModelBackend(ModelBackend):
     Custom authentication backend that allows users to login with either
     username or email address
     """
-    
+
     def authenticate(self, request, username=None, password=None, **kwargs):
         if username is None:
-            username = kwargs.get('email')
-        
+            username = kwargs.get("email")
+
         if username is None or password is None:
             return None
-        
+
         try:
             # Try to find user by username or email
-            user = User.objects.get(
-                Q(username=username) | Q(email=username)
-            )
+            user = User.objects.get(Q(username=username) | Q(email=username))
         except User.DoesNotExist:
             # Run the default password hasher once to reduce the timing
             # difference between an existing and a non-existing user
@@ -40,4 +38,3 @@ class EmailOrUsernameModelBackend(ModelBackend):
             if user.check_password(password) and self.user_can_authenticate(user):
                 return user
         return None
-

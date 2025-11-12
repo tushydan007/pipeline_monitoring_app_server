@@ -10,70 +10,156 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('auth', '0012_alter_user_first_name_max_length'),
+        ("auth", "0012_alter_user_first_name_max_length"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='UserPreference',
+            name="UserPreference",
             fields=[
-                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, primary_key=True, related_name='preferences', serialize=False, to=settings.AUTH_USER_MODEL)),
-                ('theme', models.CharField(choices=[('light', 'Light'), ('dark', 'Dark'), ('auto', 'Auto')], default='auto', max_length=10)),
-                ('items_per_page', models.IntegerField(default=20)),
-                ('dashboard_layout', models.JSONField(blank=True, default=dict)),
-                ('notification_preferences', models.JSONField(blank=True, default=dict, help_text='Stores notification preferences for different event types')),
-                ('map_preferences', models.JSONField(blank=True, default=dict, help_text='Stores map display preferences')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                (
+                    "user",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        primary_key=True,
+                        related_name="preferences",
+                        serialize=False,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "theme",
+                    models.CharField(
+                        choices=[
+                            ("light", "Light"),
+                            ("dark", "Dark"),
+                            ("auto", "Auto"),
+                        ],
+                        default="auto",
+                        max_length=10,
+                    ),
+                ),
+                ("items_per_page", models.IntegerField(default=20)),
+                ("dashboard_layout", models.JSONField(blank=True, default=dict)),
+                (
+                    "notification_preferences",
+                    models.JSONField(
+                        blank=True,
+                        default=dict,
+                        help_text="Stores notification preferences for different event types",
+                    ),
+                ),
+                (
+                    "map_preferences",
+                    models.JSONField(
+                        blank=True,
+                        default=dict,
+                        help_text="Stores map display preferences",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                'verbose_name': 'User Preference',
-                'verbose_name_plural': 'User Preferences',
+                "verbose_name": "User Preference",
+                "verbose_name_plural": "User Preferences",
             },
         ),
         migrations.CreateModel(
-            name='UserProfile',
+            name="UserProfile",
             fields=[
-                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, primary_key=True, related_name='profile', serialize=False, to=settings.AUTH_USER_MODEL)),
-                ('phone_number', models.CharField(blank=True, max_length=20, null=True)),
-                ('company', models.CharField(blank=True, max_length=255, null=True)),
-                ('job_title', models.CharField(blank=True, max_length=255, null=True)),
-                ('address', models.TextField(blank=True, null=True)),
-                ('city', models.CharField(blank=True, max_length=100, null=True)),
-                ('country', models.CharField(blank=True, max_length=100, null=True)),
-                ('postal_code', models.CharField(blank=True, max_length=20, null=True)),
-                ('timezone', models.CharField(default='UTC', max_length=50)),
-                ('preferred_language', models.CharField(default='en', max_length=10)),
-                ('bio', models.TextField(blank=True, null=True)),
-                ('avatar', models.ImageField(blank=True, null=True, upload_to='avatars/')),
-                ('email_notifications', models.BooleanField(default=True)),
-                ('push_notifications', models.BooleanField(default=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                (
+                    "user",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        primary_key=True,
+                        related_name="profile",
+                        serialize=False,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "phone_number",
+                    models.CharField(blank=True, max_length=20, null=True),
+                ),
+                ("company", models.CharField(blank=True, max_length=255, null=True)),
+                ("job_title", models.CharField(blank=True, max_length=255, null=True)),
+                ("address", models.TextField(blank=True, null=True)),
+                ("city", models.CharField(blank=True, max_length=100, null=True)),
+                ("country", models.CharField(blank=True, max_length=100, null=True)),
+                ("postal_code", models.CharField(blank=True, max_length=20, null=True)),
+                ("timezone", models.CharField(default="UTC", max_length=50)),
+                ("preferred_language", models.CharField(default="en", max_length=10)),
+                ("bio", models.TextField(blank=True, null=True)),
+                (
+                    "avatar",
+                    models.ImageField(blank=True, null=True, upload_to="avatars/"),
+                ),
+                ("email_notifications", models.BooleanField(default=True)),
+                ("push_notifications", models.BooleanField(default=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                'verbose_name': 'User Profile',
-                'verbose_name_plural': 'User Profiles',
-                'ordering': ['-created_at'],
+                "verbose_name": "User Profile",
+                "verbose_name_plural": "User Profiles",
+                "ordering": ["-created_at"],
             },
         ),
         migrations.CreateModel(
-            name='UserActivity',
+            name="UserActivity",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('activity_type', models.CharField(choices=[('login', 'Login'), ('logout', 'Logout'), ('password_change', 'Password Change'), ('profile_update', 'Profile Update'), ('pipeline_create', 'Pipeline Created'), ('image_upload', 'Image Uploaded'), ('analysis_run', 'Analysis Run')], max_length=50)),
-                ('ip_address', models.GenericIPAddressField(blank=True, null=True)),
-                ('user_agent', models.TextField(blank=True, null=True)),
-                ('metadata', models.JSONField(blank=True, default=dict)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='activities', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "activity_type",
+                    models.CharField(
+                        choices=[
+                            ("login", "Login"),
+                            ("logout", "Logout"),
+                            ("password_change", "Password Change"),
+                            ("profile_update", "Profile Update"),
+                            ("pipeline_create", "Pipeline Created"),
+                            ("image_upload", "Image Uploaded"),
+                            ("analysis_run", "Analysis Run"),
+                        ],
+                        max_length=50,
+                    ),
+                ),
+                ("ip_address", models.GenericIPAddressField(blank=True, null=True)),
+                ("user_agent", models.TextField(blank=True, null=True)),
+                ("metadata", models.JSONField(blank=True, default=dict)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="activities",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'User Activity',
-                'verbose_name_plural': 'User Activities',
-                'ordering': ['-created_at'],
-                'indexes': [models.Index(fields=['user', 'activity_type'], name='user_userac_user_id_79150f_idx'), models.Index(fields=['created_at'], name='user_userac_created_64bfd5_idx')],
+                "verbose_name": "User Activity",
+                "verbose_name_plural": "User Activities",
+                "ordering": ["-created_at"],
+                "indexes": [
+                    models.Index(
+                        fields=["user", "activity_type"],
+                        name="user_userac_user_id_79150f_idx",
+                    ),
+                    models.Index(
+                        fields=["created_at"], name="user_userac_created_64bfd5_idx"
+                    ),
+                ],
             },
         ),
     ]

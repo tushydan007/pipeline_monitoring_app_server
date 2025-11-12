@@ -7,13 +7,21 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('monitoring', '0001_initial'),
+        ("monitoring", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='pipeline',
-            name='geojson_file',
-            field=models.FileField(help_text='Upload a GeoJSON file (.json or .geojson) containing the pipeline route geometry.', upload_to='pipelines/geojson/', validators=[django.core.validators.FileExtensionValidator(allowed_extensions=['json', 'geojson'])]),
+            model_name="pipeline",
+            name="geojson_file",
+            field=models.FileField(
+                help_text="Upload a GeoJSON file (.json or .geojson) containing the pipeline route geometry.",
+                upload_to="pipelines/geojson/",
+                validators=[
+                    django.core.validators.FileExtensionValidator(
+                        allowed_extensions=["json", "geojson"]
+                    )
+                ],
+            ),
         ),
     ]

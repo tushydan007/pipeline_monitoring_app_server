@@ -17,167 +17,475 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Analysis',
+            name="Analysis",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('analysis_type', models.CharField(choices=[('oil_leak', 'Oil Leak Detection'), ('integrity', 'Pipeline Integrity'), ('thermal', 'Thermal Monitoring'), ('environmental', 'Environmental Compliance'), ('security', 'Security Monitoring'), ('sar', 'SAR Monitoring'), ('vegetation', 'Vegetation Encroachment'), ('corrosion', 'Corrosion Detection'), ('ground_subsidence', 'Ground Subsidence')], max_length=50)),
-                ('status', models.CharField(choices=[('pending', 'Pending'), ('processing', 'Processing'), ('completed', 'Completed'), ('failed', 'Failed')], default='pending', max_length=20)),
-                ('confidence_score', models.FloatField(blank=True, help_text='Confidence score (0-1)', null=True)),
-                ('severity', models.CharField(blank=True, choices=[('low', 'Low'), ('medium', 'Medium'), ('high', 'High'), ('critical', 'Critical')], max_length=20, null=True)),
-                ('results_json', models.JSONField(blank=True, default=dict)),
-                ('metadata', models.JSONField(blank=True, default=dict)),
-                ('processing_time_seconds', models.FloatField(blank=True, null=True)),
-                ('error_message', models.TextField(blank=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='analyses', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                (
+                    "analysis_type",
+                    models.CharField(
+                        choices=[
+                            ("oil_leak", "Oil Leak Detection"),
+                            ("integrity", "Pipeline Integrity"),
+                            ("thermal", "Thermal Monitoring"),
+                            ("environmental", "Environmental Compliance"),
+                            ("security", "Security Monitoring"),
+                            ("sar", "SAR Monitoring"),
+                            ("vegetation", "Vegetation Encroachment"),
+                            ("corrosion", "Corrosion Detection"),
+                            ("ground_subsidence", "Ground Subsidence"),
+                        ],
+                        max_length=50,
+                    ),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Pending"),
+                            ("processing", "Processing"),
+                            ("completed", "Completed"),
+                            ("failed", "Failed"),
+                        ],
+                        default="pending",
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "confidence_score",
+                    models.FloatField(
+                        blank=True, help_text="Confidence score (0-1)", null=True
+                    ),
+                ),
+                (
+                    "severity",
+                    models.CharField(
+                        blank=True,
+                        choices=[
+                            ("low", "Low"),
+                            ("medium", "Medium"),
+                            ("high", "High"),
+                            ("critical", "Critical"),
+                        ],
+                        max_length=20,
+                        null=True,
+                    ),
+                ),
+                ("results_json", models.JSONField(blank=True, default=dict)),
+                ("metadata", models.JSONField(blank=True, default=dict)),
+                ("processing_time_seconds", models.FloatField(blank=True, null=True)),
+                ("error_message", models.TextField(blank=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="analyses",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Analysis',
-                'verbose_name_plural': 'Analyses',
-                'ordering': ['-created_at'],
+                "verbose_name": "Analysis",
+                "verbose_name_plural": "Analyses",
+                "ordering": ["-created_at"],
             },
         ),
         migrations.CreateModel(
-            name='Anomaly',
+            name="Anomaly",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('anomaly_type', models.CharField(choices=[('oil_leak', 'Oil Leak'), ('structural_damage', 'Structural Damage'), ('thermal_anomaly', 'Thermal Anomaly'), ('vegetation_encroachment', 'Vegetation Encroachment'), ('ground_subsidence', 'Ground Subsidence'), ('unauthorized_activity', 'Unauthorized Activity'), ('corrosion', 'Corrosion'), ('pressure_anomaly', 'Pressure Anomaly')], max_length=50)),
-                ('severity', models.CharField(choices=[('low', 'Low'), ('medium', 'Medium'), ('high', 'High'), ('critical', 'Critical')], max_length=20)),
-                ('location_lat', models.FloatField()),
-                ('location_lon', models.FloatField()),
-                ('area_m2', models.FloatField(blank=True, null=True)),
-                ('description', models.TextField(blank=True)),
-                ('confidence_score', models.FloatField(help_text='Confidence score (0-1)')),
-                ('is_verified', models.BooleanField(default=False)),
-                ('is_resolved', models.BooleanField(default=False)),
-                ('verified_at', models.DateTimeField(blank=True, null=True)),
-                ('resolved_at', models.DateTimeField(blank=True, null=True)),
-                ('metadata', models.JSONField(blank=True, default=dict)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('analysis', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='anomalies', to='monitoring.analysis')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='anomalies', to=settings.AUTH_USER_MODEL)),
-                ('verified_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='verified_anomalies', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                (
+                    "anomaly_type",
+                    models.CharField(
+                        choices=[
+                            ("oil_leak", "Oil Leak"),
+                            ("structural_damage", "Structural Damage"),
+                            ("thermal_anomaly", "Thermal Anomaly"),
+                            ("vegetation_encroachment", "Vegetation Encroachment"),
+                            ("ground_subsidence", "Ground Subsidence"),
+                            ("unauthorized_activity", "Unauthorized Activity"),
+                            ("corrosion", "Corrosion"),
+                            ("pressure_anomaly", "Pressure Anomaly"),
+                        ],
+                        max_length=50,
+                    ),
+                ),
+                (
+                    "severity",
+                    models.CharField(
+                        choices=[
+                            ("low", "Low"),
+                            ("medium", "Medium"),
+                            ("high", "High"),
+                            ("critical", "Critical"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                ("location_lat", models.FloatField()),
+                ("location_lon", models.FloatField()),
+                ("area_m2", models.FloatField(blank=True, null=True)),
+                ("description", models.TextField(blank=True)),
+                (
+                    "confidence_score",
+                    models.FloatField(help_text="Confidence score (0-1)"),
+                ),
+                ("is_verified", models.BooleanField(default=False)),
+                ("is_resolved", models.BooleanField(default=False)),
+                ("verified_at", models.DateTimeField(blank=True, null=True)),
+                ("resolved_at", models.DateTimeField(blank=True, null=True)),
+                ("metadata", models.JSONField(blank=True, default=dict)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "analysis",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="anomalies",
+                        to="monitoring.analysis",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="anomalies",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "verified_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="verified_anomalies",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Anomaly',
-                'verbose_name_plural': 'Anomalies',
-                'ordering': ['-severity', '-created_at'],
+                "verbose_name": "Anomaly",
+                "verbose_name_plural": "Anomalies",
+                "ordering": ["-severity", "-created_at"],
             },
         ),
         migrations.CreateModel(
-            name='Notification',
+            name="Notification",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('notification_type', models.CharField(choices=[('email', 'Email'), ('push', 'Push Notification'), ('both', 'Both')], default='both', max_length=20)),
-                ('title', models.CharField(max_length=255)),
-                ('message', models.TextField()),
-                ('is_read', models.BooleanField(default=False)),
-                ('is_sent', models.BooleanField(default=False)),
-                ('sent_at', models.DateTimeField(blank=True, null=True)),
-                ('read_at', models.DateTimeField(blank=True, null=True)),
-                ('metadata', models.JSONField(blank=True, default=dict)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('anomaly', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='notifications', to='monitoring.anomaly')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='notifications', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                (
+                    "notification_type",
+                    models.CharField(
+                        choices=[
+                            ("email", "Email"),
+                            ("push", "Push Notification"),
+                            ("both", "Both"),
+                        ],
+                        default="both",
+                        max_length=20,
+                    ),
+                ),
+                ("title", models.CharField(max_length=255)),
+                ("message", models.TextField()),
+                ("is_read", models.BooleanField(default=False)),
+                ("is_sent", models.BooleanField(default=False)),
+                ("sent_at", models.DateTimeField(blank=True, null=True)),
+                ("read_at", models.DateTimeField(blank=True, null=True)),
+                ("metadata", models.JSONField(blank=True, default=dict)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "anomaly",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="notifications",
+                        to="monitoring.anomaly",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="notifications",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Notification',
-                'verbose_name_plural': 'Notifications',
-                'ordering': ['-created_at'],
+                "verbose_name": "Notification",
+                "verbose_name_plural": "Notifications",
+                "ordering": ["-created_at"],
             },
         ),
         migrations.CreateModel(
-            name='Pipeline',
+            name="Pipeline",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=255)),
-                ('description', models.TextField(blank=True)),
-                ('geojson_file', models.FileField(upload_to='pipelines/geojson/', validators=[django.core.validators.FileExtensionValidator(allowed_extensions=['json', 'geojson'])])),
-                ('status', models.CharField(choices=[('active', 'Active'), ('inactive', 'Inactive'), ('maintenance', 'Maintenance')], default='active', max_length=20)),
-                ('length_km', models.FloatField(blank=True, null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='pipelines', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("name", models.CharField(max_length=255)),
+                ("description", models.TextField(blank=True)),
+                (
+                    "geojson_file",
+                    models.FileField(
+                        upload_to="pipelines/geojson/",
+                        validators=[
+                            django.core.validators.FileExtensionValidator(
+                                allowed_extensions=["json", "geojson"]
+                            )
+                        ],
+                    ),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("active", "Active"),
+                            ("inactive", "Inactive"),
+                            ("maintenance", "Maintenance"),
+                        ],
+                        default="active",
+                        max_length=20,
+                    ),
+                ),
+                ("length_km", models.FloatField(blank=True, null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="pipelines",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Pipeline',
-                'verbose_name_plural': 'Pipelines',
-                'ordering': ['-created_at'],
+                "verbose_name": "Pipeline",
+                "verbose_name_plural": "Pipelines",
+                "ordering": ["-created_at"],
             },
         ),
         migrations.AddField(
-            model_name='analysis',
-            name='pipeline',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='analyses', to='monitoring.pipeline'),
+            model_name="analysis",
+            name="pipeline",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="analyses",
+                to="monitoring.pipeline",
+            ),
         ),
         migrations.CreateModel(
-            name='SatelliteImage',
+            name="SatelliteImage",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=255)),
-                ('description', models.TextField(blank=True)),
-                ('original_tiff', models.FileField(upload_to='satellite/original/', validators=[django.core.validators.FileExtensionValidator(allowed_extensions=['tif', 'tiff'])])),
-                ('cog_tiff', models.FileField(blank=True, null=True, upload_to='satellite/cog/', validators=[django.core.validators.FileExtensionValidator(allowed_extensions=['tif', 'tiff'])])),
-                ('acquisition_date', models.DateTimeField()),
-                ('image_type', models.CharField(choices=[('optical', 'Optical'), ('sar', 'SAR'), ('thermal', 'Thermal'), ('multispectral', 'Multispectral')], default='optical', max_length=50)),
-                ('is_cog_converted', models.BooleanField(default=False)),
-                ('conversion_status', models.CharField(choices=[('pending', 'Pending'), ('processing', 'Processing'), ('completed', 'Completed'), ('failed', 'Failed')], default='pending', max_length=20)),
-                ('bbox_minx', models.FloatField(blank=True, null=True)),
-                ('bbox_miny', models.FloatField(blank=True, null=True)),
-                ('bbox_maxx', models.FloatField(blank=True, null=True)),
-                ('bbox_maxy', models.FloatField(blank=True, null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('pipeline', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='satellite_images', to='monitoring.pipeline')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='satellite_images', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("name", models.CharField(max_length=255)),
+                ("description", models.TextField(blank=True)),
+                (
+                    "original_tiff",
+                    models.FileField(
+                        upload_to="satellite/original/",
+                        validators=[
+                            django.core.validators.FileExtensionValidator(
+                                allowed_extensions=["tif", "tiff"]
+                            )
+                        ],
+                    ),
+                ),
+                (
+                    "cog_tiff",
+                    models.FileField(
+                        blank=True,
+                        null=True,
+                        upload_to="satellite/cog/",
+                        validators=[
+                            django.core.validators.FileExtensionValidator(
+                                allowed_extensions=["tif", "tiff"]
+                            )
+                        ],
+                    ),
+                ),
+                ("acquisition_date", models.DateTimeField()),
+                (
+                    "image_type",
+                    models.CharField(
+                        choices=[
+                            ("optical", "Optical"),
+                            ("sar", "SAR"),
+                            ("thermal", "Thermal"),
+                            ("multispectral", "Multispectral"),
+                        ],
+                        default="optical",
+                        max_length=50,
+                    ),
+                ),
+                ("is_cog_converted", models.BooleanField(default=False)),
+                (
+                    "conversion_status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Pending"),
+                            ("processing", "Processing"),
+                            ("completed", "Completed"),
+                            ("failed", "Failed"),
+                        ],
+                        default="pending",
+                        max_length=20,
+                    ),
+                ),
+                ("bbox_minx", models.FloatField(blank=True, null=True)),
+                ("bbox_miny", models.FloatField(blank=True, null=True)),
+                ("bbox_maxx", models.FloatField(blank=True, null=True)),
+                ("bbox_maxy", models.FloatField(blank=True, null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "pipeline",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="satellite_images",
+                        to="monitoring.pipeline",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="satellite_images",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Satellite Image',
-                'verbose_name_plural': 'Satellite Images',
-                'ordering': ['-acquisition_date'],
+                "verbose_name": "Satellite Image",
+                "verbose_name_plural": "Satellite Images",
+                "ordering": ["-acquisition_date"],
             },
         ),
         migrations.AddField(
-            model_name='analysis',
-            name='satellite_image',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='analyses', to='monitoring.satelliteimage'),
+            model_name="analysis",
+            name="satellite_image",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="analyses",
+                to="monitoring.satelliteimage",
+            ),
         ),
         migrations.CreateModel(
-            name='UserDevice',
+            name="UserDevice",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('device_token', models.CharField(max_length=500, unique=True)),
-                ('device_type', models.CharField(choices=[('web', 'Web'), ('ios', 'iOS'), ('android', 'Android')], max_length=20)),
-                ('is_active', models.BooleanField(default=True)),
-                ('last_used_at', models.DateTimeField(auto_now=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='devices', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("device_token", models.CharField(max_length=500, unique=True)),
+                (
+                    "device_type",
+                    models.CharField(
+                        choices=[
+                            ("web", "Web"),
+                            ("ios", "iOS"),
+                            ("android", "Android"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                ("is_active", models.BooleanField(default=True)),
+                ("last_used_at", models.DateTimeField(auto_now=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="devices",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'User Device',
-                'verbose_name_plural': 'User Devices',
+                "verbose_name": "User Device",
+                "verbose_name_plural": "User Devices",
             },
         ),
         migrations.AddIndex(
-            model_name='anomaly',
-            index=models.Index(fields=['user', 'is_resolved'], name='monitoring__user_id_ccaa0d_idx'),
+            model_name="anomaly",
+            index=models.Index(
+                fields=["user", "is_resolved"], name="monitoring__user_id_ccaa0d_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='anomaly',
-            index=models.Index(fields=['severity', 'created_at'], name='monitoring__severit_a62bb7_idx'),
+            model_name="anomaly",
+            index=models.Index(
+                fields=["severity", "created_at"], name="monitoring__severit_a62bb7_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='notification',
-            index=models.Index(fields=['user', 'is_read'], name='monitoring__user_id_13fc75_idx'),
+            model_name="notification",
+            index=models.Index(
+                fields=["user", "is_read"], name="monitoring__user_id_13fc75_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='analysis',
-            index=models.Index(fields=['user', 'status'], name='monitoring__user_id_adc87b_idx'),
+            model_name="analysis",
+            index=models.Index(
+                fields=["user", "status"], name="monitoring__user_id_adc87b_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='analysis',
-            index=models.Index(fields=['satellite_image', 'analysis_type'], name='monitoring__satelli_815bca_idx'),
+            model_name="analysis",
+            index=models.Index(
+                fields=["satellite_image", "analysis_type"],
+                name="monitoring__satelli_815bca_idx",
+            ),
         ),
     ]
