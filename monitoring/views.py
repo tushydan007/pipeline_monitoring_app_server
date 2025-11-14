@@ -210,36 +210,36 @@ class SatelliteImageViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=["get"])
     def display_image(self, request, pk=None):
         """Serve optimized satellite image as PNG with caching"""
         try:
             from PIL import Image as PILImage
         except ImportError:
             return Response(
-                {'error': 'PIL/Pillow is required for image processing'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": "PIL/Pillow is required for image processing"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        
+
         from .utils import extract_geotiff_bbox
         import rasterio
         import numpy as np
         from io import BytesIO
         import hashlib
-        
+
         image = self.get_object()
-        
+
         # Generate cache key based on image ID and modification time
         cache_key = f"sat_image_{image.id}_{image.updated_at.timestamp()}"
-        
+
         # Try to get from cache first
         cached_response = cache.get(cache_key)
         if cached_response:
-            response = HttpResponse(cached_response, content_type='image/png')
-            response['Content-Disposition'] = f'inline; filename="{image.name}.png"'
-            response['Cache-Control'] = 'public, max-age=3600'  # Cache for 1 hour
+            response = HttpResponse(cached_response, content_type="image/png")
+            response["Content-Disposition"] = f'inline; filename="{image.name}.png"'
+            response["Cache-Control"] = "public, max-age=3600"  # Cache for 1 hour
             return response
-        
+
         # Try to use COG if available, otherwise use original
         tiff_path = None
         if image.is_cog_converted and image.cog_tiff:
@@ -247,34 +247,37 @@ class SatelliteImageViewSet(viewsets.ModelViewSet):
                 tiff_path = image.cog_tiff.path
             except ValueError:
                 pass
-        
+
         if not tiff_path and image.original_tiff:
             try:
                 tiff_path = image.original_tiff.path
             except ValueError:
                 pass
-        
+
         if not tiff_path:
             return Response(
-                {'error': 'No image file available'},
-                status=status.HTTP_404_NOT_FOUND
+                {"error": "No image file available"}, status=status.HTTP_404_NOT_FOUND
             )
-        
+
         # Update bbox if missing
-        if not all([image.bbox_minx, image.bbox_miny, image.bbox_maxx, image.bbox_maxy]):
+        if not all(
+            [image.bbox_minx, image.bbox_miny, image.bbox_maxx, image.bbox_maxy]
+        ):
             bbox = extract_geotiff_bbox(tiff_path)
             if bbox:
-                image.bbox_minx = bbox['minx']
-                image.bbox_miny = bbox['miny']
-                image.bbox_maxx = bbox['maxx']
-                image.bbox_maxy = bbox['maxy']
-                image.save(update_fields=['bbox_minx', 'bbox_miny', 'bbox_maxx', 'bbox_maxy'])
-        
+                image.bbox_minx = bbox["minx"]
+                image.bbox_miny = bbox["miny"]
+                image.bbox_maxx = bbox["maxx"]
+                image.bbox_maxy = bbox["maxy"]
+                image.save(
+                    update_fields=["bbox_minx", "bbox_miny", "bbox_maxx", "bbox_maxy"]
+                )
+
         try:
             with rasterio.open(tiff_path) as src:
                 # Get nodata value from the source
                 nodata = src.nodata
-                
+
                 # Read at reduced resolution for faster loading
                 # Use overview level if available
                 if src.overviews(1):
@@ -283,23 +286,25 @@ class SatelliteImageViewSet(viewsets.ModelViewSet):
                     decimation = 2 ** (overview_level + 1)
                 else:
                     decimation = 1
-                
+
                 # Calculate target size (max 2000px on longest side for web display)
                 max_dimension = 2000
                 out_shape = (
                     max(1, src.height // decimation),
-                    max(1, src.width // decimation)
+                    max(1, src.width // decimation),
                 )
-                
+
                 if max(out_shape) > max_dimension:
                     scale = max_dimension / max(out_shape)
                     out_shape = (
                         max(1, int(out_shape[0] * scale)),
-                        max(1, int(out_shape[1] * scale))
+                        max(1, int(out_shape[1] * scale)),
                     )
-                
+
                 # Helper function to create mask for no-data values
-                def create_nodata_mask(band_array: np.ndarray, nodata_value: float | None) -> np.ndarray:
+                def create_nodata_mask(
+                    band_array: np.ndarray, nodata_value: float | None
+                ) -> np.ndarray:
                     """Create a mask for no-data pixels"""
                     if nodata_value is None:
                         mask = np.isfinite(band_array) & (band_array > -1e10)
@@ -309,101 +314,133 @@ class SatelliteImageViewSet(viewsets.ModelViewSet):
                             return np.isfinite(band_array)
                         else:
                             if isinstance(nodata_value, (float, np.floating)):
-                                return ~np.isclose(band_array, nodata_value, rtol=1e-5, atol=1e-8, equal_nan=False)
+                                return ~np.isclose(
+                                    band_array,
+                                    nodata_value,
+                                    rtol=1e-5,
+                                    atol=1e-8,
+                                    equal_nan=False,
+                                )
                             else:
                                 return band_array != nodata_value
-                
+
                 # Helper function to normalize band excluding no-data values
-                def normalize_band(band_array: np.ndarray, nodata_mask: np.ndarray) -> np.ndarray:
+                def normalize_band(
+                    band_array: np.ndarray, nodata_mask: np.ndarray
+                ) -> np.ndarray:
                     """Normalize band to 0-255, excluding no-data pixels"""
                     valid_pixels = band_array[nodata_mask]
-                    
+
                     if len(valid_pixels) == 0:
                         return np.zeros_like(band_array, dtype=np.uint8)
-                    
+
                     # Use percentile-based normalization for better contrast
                     p2, p98 = np.percentile(valid_pixels, [2, 98])
-                    
+
                     if p98 == p2:
                         normalized = np.zeros_like(band_array, dtype=np.uint8)
                         normalized[nodata_mask] = 128
                         return normalized
-                    
+
                     # Clip and normalize
                     band_clipped = np.clip(band_array, p2, p98)
-                    normalized = ((band_clipped - p2) / (p98 - p2) * 255).astype(np.uint8)
+                    normalized = ((band_clipped - p2) / (p98 - p2) * 255).astype(
+                        np.uint8
+                    )
                     normalized[~nodata_mask] = 0
-                    
+
                     return normalized
-                
+
                 # Read image data at target resolution
                 if src.count >= 3:
                     # RGB image - read with resampling
-                    red = src.read(1, out_shape=out_shape, resampling=rasterio.enums.Resampling.bilinear)
-                    green = src.read(2, out_shape=out_shape, resampling=rasterio.enums.Resampling.bilinear)
-                    blue = src.read(3, out_shape=out_shape, resampling=rasterio.enums.Resampling.bilinear)
-                    
+                    red = src.read(
+                        1,
+                        out_shape=out_shape,
+                        resampling=rasterio.enums.Resampling.bilinear,
+                    )
+                    green = src.read(
+                        2,
+                        out_shape=out_shape,
+                        resampling=rasterio.enums.Resampling.bilinear,
+                    )
+                    blue = src.read(
+                        3,
+                        out_shape=out_shape,
+                        resampling=rasterio.enums.Resampling.bilinear,
+                    )
+
                     # Create combined mask
                     red_mask = create_nodata_mask(red, nodata)
                     green_mask = create_nodata_mask(green, nodata)
                     blue_mask = create_nodata_mask(blue, nodata)
                     combined_mask = red_mask & green_mask & blue_mask
-                    
+
                     # Normalize each band
                     red_norm = normalize_band(red, combined_mask)
                     green_norm = normalize_band(green, combined_mask)
                     blue_norm = normalize_band(blue, combined_mask)
-                    
+
                     rgb_array = np.dstack([red_norm, green_norm, blue_norm])
-                    alpha = (combined_mask.astype(np.uint8) * 255)
-                    
+                    alpha = combined_mask.astype(np.uint8) * 255
+
                 elif src.count == 1:
                     # Grayscale image
-                    gray = src.read(1, out_shape=out_shape, resampling=rasterio.enums.Resampling.bilinear)
+                    gray = src.read(
+                        1,
+                        out_shape=out_shape,
+                        resampling=rasterio.enums.Resampling.bilinear,
+                    )
                     gray_mask = create_nodata_mask(gray, nodata)
                     gray_norm = normalize_band(gray, gray_mask)
                     rgb_array = np.dstack([gray_norm, gray_norm, gray_norm])
-                    alpha = (gray_mask.astype(np.uint8) * 255)
+                    alpha = gray_mask.astype(np.uint8) * 255
                 else:
                     # Use first band
-                    band = src.read(1, out_shape=out_shape, resampling=rasterio.enums.Resampling.bilinear)
+                    band = src.read(
+                        1,
+                        out_shape=out_shape,
+                        resampling=rasterio.enums.Resampling.bilinear,
+                    )
                     band_mask = create_nodata_mask(band, nodata)
                     band_norm = normalize_band(band, band_mask)
                     rgb_array = np.dstack([band_norm, band_norm, band_norm])
-                    alpha = (band_mask.astype(np.uint8) * 255)
-                
+                    alpha = band_mask.astype(np.uint8) * 255
+
                 # Add alpha channel
                 rgba_array = np.dstack([rgb_array, alpha])
-                
+
                 # Convert to PIL Image
-                img = PILImage.fromarray(rgba_array, mode='RGBA')
-                
+                img = PILImage.fromarray(rgba_array, mode="RGBA")
+
                 # Apply sharpening for better visual quality
                 from PIL import ImageEnhance
+
                 enhancer = ImageEnhance.Sharpness(img)
                 img = enhancer.enhance(1.2)
-                
+
                 # Save to buffer with optimization
                 buffer = BytesIO()
-                img.save(buffer, format='PNG', optimize=True, compress_level=6)
+                img.save(buffer, format="PNG", optimize=True, compress_level=6)
                 image_data = buffer.getvalue()
-                
+
                 # Cache the result
                 cache.set(cache_key, image_data, 3600)  # Cache for 1 hour
-                
-                response = HttpResponse(image_data, content_type='image/png')
-                response['Content-Disposition'] = f'inline; filename="{image.name}.png"'
-                response['Cache-Control'] = 'public, max-age=3600'
-                response['X-Image-Size'] = f'{img.width}x{img.height}'
+
+                response = HttpResponse(image_data, content_type="image/png")
+                response["Content-Disposition"] = f'inline; filename="{image.name}.png"'
+                response["Cache-Control"] = "public, max-age=3600"
+                response["X-Image-Size"] = f"{img.width}x{img.height}"
                 return response
-                
+
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
-            logger.error(f'Error processing image {image.id}: {str(e)}', exc_info=True)
+            logger.error(f"Error processing image {image.id}: {str(e)}", exc_info=True)
             return Response(
-                {'error': f'Error processing image: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": f"Error processing image: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 

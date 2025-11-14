@@ -7,7 +7,136 @@ from .models import (
     Anomaly,
     Notification,
     UserDevice,
+    LegendCategory,
+    MappedObject,
 )
+
+
+class LegendCategorySerializer(serializers.ModelSerializer):
+    category_type_display = serializers.CharField(
+        source="get_category_type_display", read_only=True
+    )
+
+    class Meta:
+        model = LegendCategory
+        fields = [
+            "id",
+            "name",
+            "color",
+            "icon",
+            "description",
+            "category_type",
+            "category_type_display",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
+class MappedObjectSerializer(serializers.ModelSerializer):
+    object_type_display = serializers.CharField(
+        source="get_object_type_display", read_only=True
+    )
+    identified_by_display = serializers.CharField(
+        source="get_identified_by_display", read_only=True
+    )
+    legend_category_data = LegendCategorySerializer(
+        source="legend_category", read_only=True
+    )
+    geojson_url = serializers.SerializerMethodField()
+    geojson_data = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MappedObject
+        fields = [
+            "id",
+            "name",
+            "description",
+            "satellite_image",
+            "pipeline",
+            "geojson_file",
+            "geojson_url",
+            "geojson_data",
+            "legend_category",
+            "legend_category_data",
+            "object_type",
+            "object_type_display",
+            "area_m2",
+            "perimeter_m",
+            "centroid_lat",
+            "centroid_lon",
+            "confidence_score",
+            "identified_by",
+            "identified_by_display",
+            "is_verified",
+            "metadata",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "area_m2",
+            "perimeter_m",
+            "centroid_lat",
+            "centroid_lon",
+            "created_at",
+        ]
+
+    def get_geojson_url(self, obj):
+        if obj.geojson_file:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(obj.geojson_file.url)
+        return None
+
+    def get_geojson_data(self, obj):
+        """Return parsed GeoJSON data"""
+        if obj.geojson_file:
+            try:
+                with obj.geojson_file.open("r") as f:
+                    return json.load(f)
+            except Exception:
+                return None
+        return None
+
+
+class AnalysisDetailSerializer(serializers.ModelSerializer):
+    """Enhanced Analysis serializer with mapped objects and user-friendly display"""
+
+    analysis_type_display = serializers.CharField(
+        source="get_analysis_type_display", read_only=True
+    )
+    severity_display = serializers.CharField(
+        source="get_severity_display", read_only=True
+    )
+    mapped_objects_data = MappedObjectSerializer(
+        source="mapped_objects", many=True, read_only=True
+    )
+    analysis_summary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Analysis
+        fields = [
+            "id",
+            "satellite_image",
+            "pipeline",
+            "analysis_type",
+            "analysis_type_display",
+            "status",
+            "confidence_score",
+            "severity",
+            "severity_display",
+            "results_json",
+            "metadata",
+            "processing_time_seconds",
+            "mapped_objects_data",
+            "analysis_summary",
+            "anomalies_count",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at", "anomalies_count"]
+
+    def get_analysis_summary(self, obj):
+        """Get user-friendly summary for dashboard"""
+        return obj.get_analysis_summary()
 
 
 class UserSerializer(serializers.ModelSerializer):

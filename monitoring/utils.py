@@ -713,6 +713,9 @@ from rasterio.warp import (
     transform_geom,
     transform_bounds,
 )
+from shapely.geometry import shape
+from shapely.ops import transform
+import pyproj
 from rasterio.shutil import copy
 from rasterio.io import MemoryFile
 from rasterio.crs import CRS
@@ -722,6 +725,66 @@ from skimage import filters, feature, morphology, segmentation
 from skimage.feature import graycomatrix, graycoprops
 from scipy import ndimage, signal
 import json
+
+
+def calculate_geojson_properties(geojson_data: dict) -> dict:
+    """
+    Calculate geometric properties from GeoJSON data
+
+    Args:
+        geojson_data: GeoJSON dictionary
+
+    Returns:
+        Dictionary with centroid, area, and perimeter
+    """
+    try:
+        # Handle both Feature and FeatureCollection
+        if geojson_data["type"] == "FeatureCollection":
+            features = geojson_data["features"]
+            if not features:
+                return None
+            # Use first feature
+            geometry = features[0]["geometry"]
+        elif geojson_data["type"] == "Feature":
+            geometry = geojson_data["geometry"]
+        else:
+            geometry = geojson_data
+
+        # Create shapely geometry
+        geom = shape(geometry)
+
+        # Get centroid in WGS84
+        centroid = geom.centroid
+        centroid_lat = centroid.y
+        centroid_lon = centroid.x
+
+        # Calculate area and perimeter in meters
+        # Transform to appropriate projected CRS for accurate measurements
+        # Use UTM zone based on centroid longitude
+        utm_zone = int((centroid_lon + 180) / 6) + 1
+        utm_crs = f"+proj=utm +zone={utm_zone} +datum=WGS84"
+
+        project = pyproj.Transformer.from_crs(
+            "EPSG:4326", utm_crs, always_xy=True  # WGS84
+        ).transform
+
+        geom_projected = transform(project, geom)
+
+        area_m2 = geom_projected.area
+        perimeter_m = geom_projected.length
+
+        return {
+            "centroid_lat": centroid_lat,
+            "centroid_lon": centroid_lon,
+            "area_m2": area_m2,
+            "perimeter_m": perimeter_m,
+        }
+    except Exception as e:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error calculating GeoJSON properties: {str(e)}")
+        return None
 
 
 def convert_to_cog(input_path: str, output_path: str | None = None) -> str:

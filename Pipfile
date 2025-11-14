@@ -23,9 +23,10 @@ numpy = "*"
 pillow = "*"
 scikit-image = "*"
 rasterio = "*"
-shapely = "*"
 geopandas = "*"
 fiona = "*"
+shapely = "*"
+pyproj = "*"
 
 [dev-packages]
 black = "*"

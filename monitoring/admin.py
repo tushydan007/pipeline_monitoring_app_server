@@ -12,6 +12,61 @@ from .models import (
 )
 from .tasks import convert_to_cog_task, run_analysis_task
 from .utils import extract_geotiff_bbox
+from .models import LegendCategory, MappedObject
+
+
+@admin.register(LegendCategory)
+class LegendCategoryAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "color_preview",
+        "category_type",
+        "icon",
+        "user",
+        "created_at",
+    ]
+    list_filter = ["category_type", "created_at"]
+    search_fields = ["name", "description", "user__username"]
+    readonly_fields = ["id", "created_at", "updated_at", "color_preview_large"]
+    date_hierarchy = "created_at"
+    list_per_page = 20
+
+    fieldsets = (
+        ("Basic Information", {"fields": ("id", "user", "name", "description")}),
+        (
+            "Visual Properties",
+            {
+                "fields": ("color", "color_preview_large", "icon", "category_type"),
+                "description": "Configure how this legend appears on the map",
+            },
+        ),
+        ("Timestamps", {"fields": ("created_at", "updated_at")}),
+    )
+
+    def color_preview(self, obj):
+        """Display color as a small colored box"""
+        return format_html(
+            '<div style="width: 30px; height: 20px; background-color: {}; border: 1px solid #000; border-radius: 3px;"></div>',
+            obj.color,
+        )
+
+    color_preview.short_description = "Color"
+
+    def color_preview_large(self, obj):
+        """Display larger color preview"""
+        return format_html(
+            '<div style="width: 100px; height: 50px; background-color: {}; border: 2px solid #000; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; text-shadow: 1px 1px 2px black;">{}</div>',
+            obj.color,
+            obj.color,
+        )
+
+    color_preview_large.short_description = "Color Preview"
+
+    def save_model(self, request, obj, form, change):
+        """Set user if creating new object"""
+        if not change:
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Pipeline)
@@ -511,3 +566,190 @@ class UserDeviceAdmin(admin.ModelAdmin):
     search_fields = ["user__username", "device_token"]
     readonly_fields = ["id", "created_at"]
     list_per_page = 20
+
+
+@admin.register(MappedObject)
+class MappedObjectAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "object_type_colored",
+        "satellite_image",
+        "legend_display",
+        "area_display",
+        "identified_by",
+        "is_verified",
+        "created_at",
+    ]
+    list_filter = [
+        "object_type",
+        "identified_by",
+        "is_verified",
+        "legend_category__category_type",
+        "created_at",
+    ]
+    search_fields = ["name", "description", "user__username", "satellite_image__name"]
+    readonly_fields = [
+        "id",
+        "created_at",
+        "updated_at",
+        "geojson_preview",
+        "location_map",
+    ]
+    date_hierarchy = "created_at"
+    list_per_page = 20
+    actions = ["mark_as_verified", "mark_as_unverified"]
+
+    fieldsets = (
+        ("Basic Information", {"fields": ("id", "user", "name", "description")}),
+        ("Association", {"fields": ("satellite_image", "pipeline", "legend_category")}),
+        (
+            "Object Details",
+            {
+                "fields": (
+                    "object_type",
+                    "geojson_file",
+                    "geojson_preview",
+                    "area_m2",
+                    "perimeter_m",
+                    "centroid_lat",
+                    "centroid_lon",
+                    "location_map",
+                )
+            },
+        ),
+        (
+            "Identification",
+            {
+                "fields": (
+                    "identified_by",
+                    "confidence_score",
+                    "is_verified",
+                    "verified_by",
+                    "verified_at",
+                )
+            },
+        ),
+        ("Additional Data", {"fields": ("metadata",), "classes": ("collapse",)}),
+        ("Timestamps", {"fields": ("created_at", "updated_at")}),
+    )
+
+    def object_type_colored(self, obj):
+        """Display object type with color coding"""
+        color_map = {
+            "oil_spill": "#FF0000",
+            "encroachment": "#FF6600",
+            "building": "#666666",
+            "vehicle": "#0066FF",
+            "infrastructure": "#9933FF",
+            "vegetation": "#00CC00",
+            "water_body": "#0099CC",
+            "unknown": "#CCCCCC",
+        }
+        color = color_map.get(obj.object_type, "#CCCCCC")
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 8px; border-radius: 3px; font-weight: bold;">{}</span>',
+            color,
+            obj.get_object_type_display(),
+        )
+
+    object_type_colored.short_description = "Object Type"
+    object_type_colored.admin_order_field = "object_type"
+
+    def legend_display(self, obj):
+        """Display legend category with color"""
+        if obj.legend_category:
+            return format_html(
+                '<div style="display: flex; align-items: center; gap: 5px;">'
+                '<div style="width: 20px; height: 20px; background-color: {}; border: 1px solid #000; border-radius: 3px;"></div>'
+                "<span>{}</span>"
+                "</div>",
+                obj.legend_category.color,
+                obj.legend_category.name,
+            )
+        return "No legend"
+
+    legend_display.short_description = "Legend"
+
+    def area_display(self, obj):
+        """Display area in user-friendly format"""
+        if obj.area_m2:
+            if obj.area_m2 > 10000:
+                return f"{obj.area_m2 / 10000:.2f} ha"
+            return f"{obj.area_m2:.2f} m²"
+        return "N/A"
+
+    area_display.short_description = "Area"
+    area_display.admin_order_field = "area_m2"
+
+    def geojson_preview(self, obj):
+        """Display GeoJSON file preview link"""
+        if obj.geojson_file:
+            return format_html(
+                '<a href="{}" target="_blank" class="button">View GeoJSON File</a>',
+                obj.geojson_file.url,
+            )
+        return "No file"
+
+    geojson_preview.short_description = "GeoJSON File"
+
+    def location_map(self, obj):
+        """Display location on map link"""
+        if obj.centroid_lat and obj.centroid_lon:
+            return format_html(
+                '<a href="https://www.google.com/maps/search/?api=1&query={},{}" target="_blank" class="button">'
+                "View on Map ({:.6f}, {:.6f})</a>",
+                obj.centroid_lat,
+                obj.centroid_lon,
+                obj.centroid_lat,
+                obj.centroid_lon,
+            )
+        return "No coordinates"
+
+    location_map.short_description = "Location"
+
+    @admin.action(description="Mark selected objects as verified")
+    def mark_as_verified(self, request, queryset):
+        from django.utils import timezone
+
+        queryset.update(
+            is_verified=True, verified_by=request.user, verified_at=timezone.now()
+        )
+        self.message_user(request, f"{queryset.count()} object(s) marked as verified.")
+
+    @admin.action(description="Mark selected objects as unverified")
+    def mark_as_unverified(self, request, queryset):
+        queryset.update(is_verified=False, verified_by=None, verified_at=None)
+        self.message_user(
+            request, f"{queryset.count()} object(s) marked as unverified."
+        )
+
+    def save_model(self, request, obj, form, change):
+        """Set user if creating new object and calculate geometry properties"""
+        if not change:
+            obj.user = request.user
+
+        # Try to extract geometry properties from GeoJSON
+        if obj.geojson_file:
+            try:
+                import json
+
+                with obj.geojson_file.open("r") as f:
+                    geojson_data = json.load(f)
+
+                # Calculate centroid and area
+                from .utils import calculate_geojson_properties
+
+                properties = calculate_geojson_properties(geojson_data)
+
+                if properties:
+                    obj.centroid_lat = properties.get("centroid_lat")
+                    obj.centroid_lon = properties.get("centroid_lon")
+                    obj.area_m2 = properties.get("area_m2")
+                    obj.perimeter_m = properties.get("perimeter_m")
+            except Exception as e:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error calculating GeoJSON properties: {str(e)}")
+
+        super().save_model(request, obj, form, change)
