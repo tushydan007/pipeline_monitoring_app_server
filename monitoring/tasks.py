@@ -200,25 +200,33 @@ import json
 from typing import Dict, Any
 from .models import SatelliteImage, Analysis, Anomaly, Notification
 from .utils import convert_to_cog, extract_geotiff_bbox, run_pipeline_analysis
+from pathlib import Path
 
 
 @shared_task(bind=True, max_retries=3)
 def convert_to_cog_task(self, image_id: str):
-    """Convert satellite image to Cloud Optimized GeoTIFF"""
     try:
         image = SatelliteImage.objects.get(id=image_id)
         image.conversion_status = "processing"
         image.save()
 
+        # Now returns Path
         cog_path = convert_to_cog(image.original_tiff.path)
 
-        # Update the model with COG file
-        image.cog_tiff.name = cog_path.replace(settings.MEDIA_ROOT + "/", "")
+        # SAFE: Use Path methods
+        media_root = Path(settings.MEDIA_ROOT)
+        try:
+            relative_path = cog_path.relative_to(media_root)
+            image.cog_tiff.name = relative_path.as_posix()  # e.g., "images/image_cog.tif"
+        except ValueError:
+            # Fallback: if not under MEDIA_ROOT
+            image.cog_tiff.name = cog_path.name
+
         image.is_cog_converted = True
         image.conversion_status = "completed"
 
-        # Extract bounding box
-        bbox = extract_geotiff_bbox(cog_path)
+        # extract_geotiff_bbox expects str
+        bbox = extract_geotiff_bbox(str(cog_path))
         if bbox:
             image.bbox_minx = bbox["minx"]
             image.bbox_miny = bbox["miny"]
@@ -231,9 +239,12 @@ def convert_to_cog_task(self, image_id: str):
     except SatelliteImage.DoesNotExist:
         return {"status": "error", "message": "Image not found"}
     except Exception as exc:
-        image = SatelliteImage.objects.get(id=image_id)
-        image.conversion_status = "failed"
-        image.save()
+        try:
+            image = SatelliteImage.objects.get(id=image_id)
+            image.conversion_status = "failed"
+            image.save()
+        except:
+            pass
         raise self.retry(exc=exc, countdown=60)
 
 

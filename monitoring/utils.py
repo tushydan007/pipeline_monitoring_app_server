@@ -705,6 +705,7 @@
 
 
 import os
+from pathlib import Path
 import rasterio
 from rasterio.enums import Resampling
 from rasterio.warp import (
@@ -787,49 +788,30 @@ def calculate_geojson_properties(geojson_data: dict) -> dict:
         return None
 
 
-def convert_to_cog(input_path: str, output_path: str | None = None) -> str:
-    """
-    Convert a GeoTIFF file to Cloud Optimized GeoTIFF (COG)
-
-    Args:
-        input_path: Path to input GeoTIFF file
-        output_path: Optional output path. If None, will be auto-generated
-
-    Returns:
-        Path to the created COG file
-    """
+def convert_to_cog(input_path: str | Path, output_path: str | Path | None = None) -> Path:
+    input_path = Path(input_path)
     if output_path is None:
-        base, ext = os.path.splitext(input_path)
-        output_path = f"{base}_cog.tif"
-
+        output_path = input_path.with_name(f"{input_path.stem}_cog.tif")
+        
     with rasterio.open(input_path) as src:
-        # Create COG profile
         profile = src.profile.copy()
-        profile.update(
-            {
-                "driver": "GTiff",
-                "tiled": True,
-                "blockxsize": 512,
-                "blockysize": 512,
-                "compress": "lzw",
-                "interleave": "band",
-                "photometric": "MINISBLACK",
-            }
-        )
+        profile.update({
+            "driver": "GTiff",
+            "tiled": True,
+            "blockxsize": 512,
+            "blockysize": 512,
+            "compress": "lzw",
+            "interleave": "band",
+        })
 
-        # Add overviews
         with rasterio.open(output_path, "w", **profile) as dst:
-            # Copy data
             for i in range(1, src.count + 1):
-                data = src.read(i)
-                dst.write(data, i)
-
-            # Build overviews
+                dst.write(src.read(i), i)
             overviews = [2, 4, 8, 16]
             dst.build_overviews(overviews, Resampling.average)
             dst.update_tags(ns="rio_overview", resampling="average")
 
-    return output_path
+    return output_path  # Returns Path
 
 
 def extract_geotiff_bbox(geotiff_path: str) -> Dict[str, float] | None:
