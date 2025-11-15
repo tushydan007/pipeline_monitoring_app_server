@@ -11,8 +11,6 @@ from user.jwt_serializers import CustomTokenObtainPairSerializer
 from .health import health_check
 
 
-
-
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
