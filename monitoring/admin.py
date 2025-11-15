@@ -728,13 +728,41 @@ class MappedObjectAdmin(admin.ModelAdmin):
         if not change:
             obj.user = request.user
 
-        # Try to extract geometry properties from GeoJSON
-        if obj.geojson_file:
+        # Save the object first to ensure the file is properly saved
+        super().save_model(request, obj, form, change)
+
+        # Now try to extract geometry properties from GeoJSON
+        # Only do this if we have a geojson_file and the geometry fields are not set
+        if obj.geojson_file and not all(
+            [obj.centroid_lat, obj.centroid_lon, obj.area_m2]
+        ):
             try:
                 import json
+                from io import BytesIO
 
-                with obj.geojson_file.open("r") as f:
-                    geojson_data = json.load(f)
+                # Read the file content into memory
+                geojson_file = obj.geojson_file
+
+                # Check if file is already closed or doesn't exist
+                if not geojson_file:
+                    return
+
+                # Read file content safely
+                try:
+                    # Seek to beginning if possible
+                    geojson_file.seek(0)
+                    file_content = geojson_file.read()
+                except (ValueError, AttributeError):
+                    # File might be closed, try to reopen it
+                    geojson_file.open("rb")
+                    file_content = geojson_file.read()
+                    geojson_file.close()
+
+                # Parse the JSON
+                if isinstance(file_content, bytes):
+                    geojson_data = json.loads(file_content.decode("utf-8"))
+                else:
+                    geojson_data = json.loads(file_content)
 
                 # Calculate centroid and area
                 from .utils import calculate_geojson_properties
@@ -746,10 +774,20 @@ class MappedObjectAdmin(admin.ModelAdmin):
                     obj.centroid_lon = properties.get("centroid_lon")
                     obj.area_m2 = properties.get("area_m2")
                     obj.perimeter_m = properties.get("perimeter_m")
+
+                    # Save again with the calculated properties
+                    obj.save(
+                        update_fields=[
+                            "centroid_lat",
+                            "centroid_lon",
+                            "area_m2",
+                            "perimeter_m",
+                        ]
+                    )
             except Exception as e:
                 import logging
 
                 logger = logging.getLogger(__name__)
                 logger.error(f"Error calculating GeoJSON properties: {str(e)}")
-
-        super().save_model(request, obj, form, change)
+                # Don't fail the save operation, just log the error
+                pass
