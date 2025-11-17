@@ -481,16 +481,24 @@ class AnomalyAdmin(admin.ModelAdmin):
     anomaly_type_display.admin_order_field = "anomaly_type"
 
     def location(self, obj):
+        if obj.location_lat is None or obj.location_lon is None:
+            return "No coordinates yet"
+        
+        # Use % formatting (what format_html expects) and force float formatting safely
+        lat = float(obj.location_lat)
+        lon = float(obj.location_lon)
+        
+        link = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+        display_text = "({:.6f}, {:.6f})".format(lat, lon)
+        
         return format_html(
-            '<a href="https://www.google.com/maps/search/?api=1&query={},{}" target="_blank">'
-            "({:.6f}, {:.6f})</a>",
-            obj.location_lat,
-            obj.location_lon,
-            obj.location_lat,
-            obj.location_lon,
+            '<a href="{}" target="_blank" style="color: #1a0dab; text-decoration: underline;">{}</a>',
+            link,
+            display_text
         )
 
     location.short_description = "Location (click to view on map)"
+    location.admin_order_field = "location_lat"  # optional: allows sorting
 
     def anomaly_details(self, obj):
         """Display detailed information about the anomaly"""
@@ -693,15 +701,15 @@ class MappedObjectAdmin(admin.ModelAdmin):
     geojson_preview.short_description = "GeoJSON File"
 
     def location_map(self, obj):
-        """Display location on map link"""
-        if obj.centroid_lat and obj.centroid_lon:
+        if obj.centroid_lat is not None and obj.centroid_lon is not None:
+            lat = float(obj.centroid_lat)
+            lon = float(obj.centroid_lon)
+            link = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+            display = "View on Map ({:.6f}, {:.6f})".format(lat, lon)
             return format_html(
-                '<a href="https://www.google.com/maps/search/?api=1&query={},{}" target="_blank" class="button">'
-                "View on Map ({:.6f}, {:.6f})</a>",
-                obj.centroid_lat,
-                obj.centroid_lon,
-                obj.centroid_lat,
-                obj.centroid_lon,
+                '<a href="{}" target="_blank" style="color: #1a0dab;">{}</a>',
+                link,
+                display
             )
         return "No coordinates"
 
