@@ -1661,7 +1661,7 @@ def glcm_texture_analysis(
     distances = [1, 3, 5]
     angles = [0, np.pi / 4, np.pi / 2, 3 * np.pi / 4]
 
-    # Calculate GLCM
+    Calculate GLCM
     glcm = graycomatrix(
         image_uint8,
         distances=distances,

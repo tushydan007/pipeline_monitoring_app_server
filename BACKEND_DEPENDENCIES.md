@@ -44,7 +44,7 @@ This document lists all Python packages and dependencies used in the backend Dja
 ## Task Queue & Caching
 
 ### Celery & Redis
-
+ 
 - **celery** (>=5.3.6) - Distributed task queue
 - **redis** (>=5.0.4) - Redis Python client
 - **django-celery-beat** (>=2.7.0) - Database-backed Periodic Tasks for Celery
