@@ -24,7 +24,9 @@ def convert_to_cog_task(self, image_id: str):
         media_root = Path(settings.MEDIA_ROOT)
         try:
             relative_path = cog_path.relative_to(media_root)
-            image.cog_tiff.name = relative_path.as_posix()  # e.g., "images/image_cog.tif"
+            image.cog_tiff.name = (
+                relative_path.as_posix()
+            )  # e.g., "images/image_cog.tif"
         except ValueError:
             # Fallback: if not under MEDIA_ROOT
             image.cog_tiff.name = cog_path.name
@@ -248,3 +250,168 @@ def cleanup_old_notifications(days: int = 30):
         }
     except Exception as exc:
         return {"status": "error", "message": str(exc)}
+
+
+# Add this task to your existing tasks.py file
+
+@shared_task(bind=True, max_retries=3)
+def run_object_identification_task(self, image_id: str):
+    """
+    Run automated object identification on a satellite image
+    This creates MappedObject instances for detected objects
+    """
+    try:
+        from .models import SatelliteImage, MappedObject, LegendCategory, Analysis
+        from .utils import run_object_identification_analysis
+        from django.core.files.base import ContentFile
+        import json
+        import uuid
+        
+        image = SatelliteImage.objects.get(id=image_id)
+        
+        if not image.is_cog_converted:
+            return {
+                "status": "error",
+                "message": "Image must be converted to COG first",
+            }
+
+        start_time = timezone.now()
+
+        # Run object identification analysis
+        # This should return detected objects with their geometries
+        identification_results = run_object_identification_analysis(
+            image.cog_tiff.path, 
+            image
+        )
+
+        if not identification_results or "detected_objects" not in identification_results:
+            return {
+                "status": "success",
+                "message": "No objects detected",
+                "objects_created": 0,
+            }
+
+        objects_created = 0
+        
+        # Get or create default legend categories for different object types
+        legend_categories = {}
+        object_type_colors = {
+            "oil_spill": ("#FF0000", "🛢️"),
+            "encroachment": ("#FF6600", "⚠️"),
+            "building": ("#666666", "🏢"),
+            "vehicle": ("#0066FF", "🚗"),
+            "infrastructure": ("#9933FF", "🏗️"),
+            "vegetation": ("#00CC00", "🌳"),
+            "water_body": ("#0099CC", "💧"),
+            "unknown": ("#CCCCCC", "❓"),
+        }
+
+        for obj_type, (color, icon) in object_type_colors.items():
+            category, created = LegendCategory.objects.get_or_create(
+                user=image.user,
+                name=f"AI Detected {obj_type.replace('_', ' ').title()}",
+                defaults={
+                    "color": color,
+                    "icon": icon,
+                    "category_type": obj_type,
+                    "description": f"Automatically detected {obj_type.replace('_', ' ')} objects",
+                }
+            )
+            legend_categories[obj_type] = category
+
+        # Create MappedObject instances for each detected object
+        for detected_obj in identification_results["detected_objects"]:
+            try:
+                obj_type = detected_obj.get("type", "unknown")
+                geojson_data = detected_obj.get("geojson")
+                confidence = detected_obj.get("confidence", 0.0)
+                
+                if not geojson_data:
+                    continue
+
+                # Create a unique name for the object
+                obj_name = f"AI_{obj_type}_{uuid.uuid4().hex[:8]}"
+
+                # Create GeoJSON file content
+                geojson_content = json.dumps(geojson_data, indent=2)
+                geojson_file = ContentFile(
+                    geojson_content.encode('utf-8'),
+                    name=f"{obj_name}.geojson"
+                )
+
+                # Create MappedObject
+                mapped_obj = MappedObject.objects.create(
+                    user=image.user,
+                    satellite_image=image,
+                    pipeline=image.pipeline,
+                    name=obj_name,
+                    description=f"Automatically identified {obj_type.replace('_', ' ')} with {confidence:.1%} confidence",
+                    geojson_file=geojson_file,
+                    legend_category=legend_categories.get(obj_type),
+                    object_type=obj_type,
+                    confidence_score=confidence,
+                    identified_by="ai",
+                    metadata={
+                        "detection_method": "deep_learning",
+                        "analysis_date": timezone.now().isoformat(),
+                        "model_confidence": confidence,
+                    }
+                )
+
+                objects_created += 1
+
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error creating mapped object: {str(e)}")
+                continue
+
+        # Create or update the object_identification analysis record
+        processing_time = (timezone.now() - start_time).total_seconds()
+        
+        analysis, created = Analysis.objects.get_or_create(
+            user=image.user,
+            satellite_image=image,
+            pipeline=image.pipeline,
+            analysis_type="object_identification",
+            defaults={
+                "status": "completed",
+                "confidence_score": identification_results.get("average_confidence", 0.75),
+                "severity": "low",
+                "results_json": {
+                    "objects_detected": objects_created,
+                    "detection_summary": identification_results.get("summary", {}),
+                },
+                "metadata": {
+                    "detection_method": "deep_learning",
+                    "processing_time": processing_time,
+                },
+                "processing_time_seconds": processing_time,
+            }
+        )
+
+        if not created:
+            # Update existing analysis
+            analysis.status = "completed"
+            analysis.confidence_score = identification_results.get("average_confidence", 0.75)
+            analysis.results_json = {
+                "objects_detected": objects_created,
+                "detection_summary": identification_results.get("summary", {}),
+            }
+            analysis.processing_time_seconds = processing_time
+            analysis.save()
+
+        return {
+            "status": "success",
+            "image_id": str(image_id),
+            "objects_created": objects_created,
+            "processing_time": processing_time,
+        }
+
+    except SatelliteImage.DoesNotExist:
+        return {"status": "error", "message": "Image not found"}
+    except Exception as exc:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Object identification failed for image {image_id}: {str(exc)}")
+        raise self.retry(exc=exc, countdown=120)

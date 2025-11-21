@@ -1,4 +1,3 @@
-
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import FileExtensionValidator
@@ -252,6 +251,32 @@ class SatelliteImage(models.Model):
 class Analysis(models.Model):
     """Model for pipeline monitoring analysis results"""
 
+    # Analysis type groupings
+    OIL_SPILL_TYPES = [
+        "backscatter_threshold",
+        "glcm_texture",
+        "polarimetric_decomp",
+        "time_series",
+    ]
+
+    ENCROACHMENT_TYPES = [
+        "insar",
+        "dinsar",
+        "psinsar",
+        "sbas_insar",
+        "phase_unwrap",
+        "atmospheric_corr",
+    ]
+
+    OBJECT_DETECTION_TYPES = [
+        "cfar",
+        "polarimetric_scatter",
+        "texture_shape",
+        "coherence_change",
+        "deep_learning",
+        "object_identification",
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="analyses")
     satellite_image = models.ForeignKey(
@@ -267,24 +292,25 @@ class Analysis(models.Model):
     analysis_type = models.CharField(
         max_length=50,
         choices=[
+            # Oil Spill Detection
             ("backscatter_threshold", "Backscatter Thresholding"),
             ("glcm_texture", "GLCM Texture Analysis"),
             ("polarimetric_decomp", "Polarimetric Decomposition"),
             ("time_series", "Time-series Tracking"),
+            # Pipeline Encroachment
             ("insar", "InSAR"),
             ("dinsar", "DInSAR"),
             ("psinsar", "PS-InSAR"),
             ("sbas_insar", "SBAS-InSAR"),
             ("phase_unwrap", "Phase Unwrapping"),
             ("atmospheric_corr", "Atmospheric Correction"),
+            # Object Detection
             ("cfar", "CFAR Detection"),
             ("polarimetric_scatter", "Polarimetric Scattering Analysis"),
             ("texture_shape", "Texture/Shape Metrics"),
             ("coherence_change", "Coherence Change Detection"),
             ("deep_learning", "Deep Learning Analysis"),
-            ("object_identification", "Object Identification"),  # NEW
-            ("oil_spill_detection", "Oil Spill Detection"),  # NEW
-            ("pipeline_encroachment", "Pipeline Encroachment"),  # NEW
+            ("object_identification", "Object Identification"),
         ],
     )
     mapped_objects = models.ManyToManyField(
@@ -333,72 +359,18 @@ class Analysis(models.Model):
             models.Index(fields=["satellite_image", "analysis_type"]),
         ]
 
-    def get_analysis_summary(self):
-        """Get user-friendly summary for dashboard display"""
-        summary = {
-            "header": self.get_analysis_type_display(),
-            "date": self.created_at,
-            "confidence": self.confidence_score,
-            "severity": self.severity,
-            "location": None,
-            "coordinates": None,
-            "legends": [],
-            "specific_data": {},
-        }
-
-        # Get associated mapped objects with their legends
-        if self.mapped_objects.exists():
-            legends = []
-            for obj in self.mapped_objects.all():
-                if obj.legend_category:
-                    legends.append(
-                        {
-                            "name": obj.legend_category.name,
-                            "color": obj.legend_category.color,
-                            "icon": obj.legend_category.icon,
-                            "type": obj.legend_category.category_type,
-                        }
-                    )
-                if obj.centroid_lat and obj.centroid_lon:
-                    summary["coordinates"] = {
-                        "lat": obj.centroid_lat,
-                        "lon": obj.centroid_lon,
-                    }
-            summary["legends"] = legends
-
-        # Analysis type specific data
-        if self.analysis_type in ["oil_spill_detection", "object_identification"]:
-            oil_spills = self.mapped_objects.filter(object_type="oil_spill")
-            if oil_spills.exists():
-                total_extent = sum(obj.area_m2 or 0 for obj in oil_spills)
-                summary["specific_data"] = {
-                    "spill_extent": f"{total_extent:.2f} m²",
-                    "num_spills": oil_spills.count(),
-                }
-
-        elif self.analysis_type == "pipeline_encroachment":
-            encroachments = self.mapped_objects.filter(object_type="encroachment")
-            summary["specific_data"] = {
-                "num_encroachments": encroachments.count(),
-                "total_area": sum(obj.area_m2 or 0 for obj in encroachments),
-            }
-
-        elif self.analysis_type == "object_identification":
-            objects_by_type = {}
-            for obj in self.mapped_objects.all():
-                obj_type = obj.get_object_type_display()
-                objects_by_type[obj_type] = objects_by_type.get(obj_type, 0) + 1
-            summary["specific_data"] = {
-                "objects_identified": objects_by_type,
-                "total_objects": self.mapped_objects.count(),
-            }
-
-        return summary
+    def get_analysis_category(self):
+        """Get the category this analysis belongs to"""
+        if self.analysis_type in self.OIL_SPILL_TYPES:
+            return "oil_spill_detection"
+        elif self.analysis_type in self.ENCROACHMENT_TYPES:
+            return "pipeline_encroachment"
+        elif self.analysis_type in self.OBJECT_DETECTION_TYPES:
+            return "object_detection"
+        return "unknown"
 
     def __str__(self):
         return f"{self.get_analysis_type_display()} - {self.satellite_image.name}"
-
-    # Analysis.get_analysis_summary = get_analysis_summary
 
 
 class Anomaly(models.Model):

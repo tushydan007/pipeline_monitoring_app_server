@@ -1661,7 +1661,7 @@ def glcm_texture_analysis(
     distances = [1, 3, 5]
     angles = [0, np.pi / 4, np.pi / 2, 3 * np.pi / 4]
 
-    Calculate GLCM
+    # Calculate GLCM
     glcm = graycomatrix(
         image_uint8,
         distances=distances,
@@ -2077,3 +2077,237 @@ def dinsar_analysis(image: np.ndarray, src: rasterio.DatasetReader) -> Dict[str,
         "processing_time": processing_time,
         "anomalies": anomalies,
     }
+
+
+# Add this function to your existing utils.py file
+
+def run_object_identification_analysis(cog_path: str, satellite_image) -> Dict[str, Any]:
+    """
+    Run automated object identification on satellite imagery
+    This simulates deep learning object detection and returns detected objects as GeoJSON
+
+    Args:
+        cog_path: Path to Cloud Optimized GeoTIFF
+        satellite_image: SatelliteImage model instance
+
+    Returns:
+        Dictionary containing detected objects with their geometries
+    """
+    import rasterio
+    import numpy as np
+    from shapely.geometry import box, Point, Polygon, mapping
+    from scipy import ndimage
+    import json
+
+    try:
+        with rasterio.open(cog_path) as src:
+            # Read image data
+            if src.count >= 3:
+                band1 = src.read(1)
+                band2 = src.read(2)
+                band3 = src.read(3)
+                multi_band = np.stack([band1, band2, band3], axis=0)
+            else:
+                band1 = src.read(1)
+                multi_band = np.stack([band1] * 3, axis=0)
+
+            primary_band = multi_band[0]
+            
+            # Normalize image
+            image_normalized = (primary_band - primary_band.min()) / (
+                primary_band.max() - primary_band.min() + 1e-8
+            )
+
+            detected_objects = []
+            
+            # Simulate different object detection techniques
+            
+            # 1. Detect potential oil spills (low backscatter areas)
+            oil_spill_threshold = np.percentile(image_normalized, 15)
+            potential_spills = image_normalized < oil_spill_threshold
+            
+            # Clean up with morphological operations
+            kernel = morphology.disk(3)
+            potential_spills = morphology.closing(potential_spills, kernel)
+            potential_spills = morphology.remove_small_objects(potential_spills, min_size=200)
+            
+            labeled_spills = ndimage.label(potential_spills)[0]
+            spill_regions = ndimage.find_objects(labeled_spills)
+            
+            for region in spill_regions:
+                if region is not None:
+                    y_coords, x_coords = region
+                    area_pixels = np.sum(potential_spills[y_coords, x_coords])
+                    
+                    if area_pixels > 300:  # Significant spill area
+                        # Create bounding box in pixel coordinates
+                        y_min, y_max = y_coords.start, y_coords.stop
+                        x_min, x_max = x_coords.start, x_coords.stop
+                        
+                        # Convert pixel coordinates to geographic coordinates
+                        top_left = rasterio.transform.xy(src.transform, y_min, x_min)
+                        top_right = rasterio.transform.xy(src.transform, y_min, x_max)
+                        bottom_right = rasterio.transform.xy(src.transform, y_max, x_max)
+                        bottom_left = rasterio.transform.xy(src.transform, y_max, x_min)
+                        
+                        # Create polygon geometry
+                        coordinates = [
+                            [top_left[0], top_left[1]],
+                            [top_right[0], top_right[1]],
+                            [bottom_right[0], bottom_right[1]],
+                            [bottom_left[0], bottom_left[1]],
+                            [top_left[0], top_left[1]],  # Close the polygon
+                        ]
+                        
+                        geojson = {
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "Polygon",
+                                "coordinates": [coordinates]
+                            },
+                            "properties": {
+                                "object_type": "oil_spill",
+                                "area_pixels": int(area_pixels),
+                                "confidence": float(min(0.85, 0.65 + area_pixels / 5000))
+                            }
+                        }
+                        
+                        detected_objects.append({
+                            "type": "oil_spill",
+                            "geojson": geojson,
+                            "confidence": geojson["properties"]["confidence"],
+                            "area": float(area_pixels * 0.1),  # Approximate area in m²
+                        })
+            
+            # 2. Detect buildings/infrastructure (high backscatter rectangular shapes)
+            high_backscatter_threshold = np.percentile(image_normalized, 85)
+            potential_buildings = image_normalized > high_backscatter_threshold
+            
+            potential_buildings = morphology.closing(potential_buildings, morphology.disk(2))
+            potential_buildings = morphology.remove_small_objects(potential_buildings, min_size=50)
+            
+            labeled_buildings = ndimage.label(potential_buildings)[0]
+            building_regions = ndimage.find_objects(labeled_buildings)
+            
+            for region in building_regions:
+                if region is not None:
+                    y_coords, x_coords = region
+                    area_pixels = np.sum(potential_buildings[y_coords, x_coords])
+                    
+                    # Calculate aspect ratio to identify rectangular shapes
+                    height = y_coords.stop - y_coords.start
+                    width = x_coords.stop - x_coords.start
+                    aspect_ratio = max(height, width) / (min(height, width) + 1)
+                    
+                    if 100 < area_pixels < 2000 and aspect_ratio < 4:  # Building-like shape
+                        y_min, y_max = y_coords.start, y_coords.stop
+                        x_min, x_max = x_coords.start, x_coords.stop
+                        
+                        top_left = rasterio.transform.xy(src.transform, y_min, x_min)
+                        top_right = rasterio.transform.xy(src.transform, y_min, x_max)
+                        bottom_right = rasterio.transform.xy(src.transform, y_max, x_max)
+                        bottom_left = rasterio.transform.xy(src.transform, y_max, x_min)
+                        
+                        coordinates = [
+                            [top_left[0], top_left[1]],
+                            [top_right[0], top_right[1]],
+                            [bottom_right[0], bottom_right[1]],
+                            [bottom_left[0], bottom_left[1]],
+                            [top_left[0], top_left[1]],
+                        ]
+                        
+                        geojson = {
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "Polygon",
+                                "coordinates": [coordinates]
+                            },
+                            "properties": {
+                                "object_type": "building",
+                                "area_pixels": int(area_pixels),
+                                "aspect_ratio": float(aspect_ratio),
+                                "confidence": float(min(0.80, 0.6 + (1 / aspect_ratio) * 0.2))
+                            }
+                        }
+                        
+                        detected_objects.append({
+                            "type": "building",
+                            "geojson": geojson,
+                            "confidence": geojson["properties"]["confidence"],
+                            "area": float(area_pixels * 0.1),
+                        })
+            
+            # 3. Detect vehicles (small high-intensity points)
+            very_high_threshold = np.percentile(image_normalized, 95)
+            potential_vehicles = image_normalized > very_high_threshold
+            
+            labeled_vehicles = ndimage.label(potential_vehicles)[0]
+            vehicle_regions = ndimage.find_objects(labeled_vehicles)
+            
+            for region in vehicle_regions:
+                if region is not None:
+                    y_coords, x_coords = region
+                    area_pixels = np.sum(potential_vehicles[y_coords, x_coords])
+                    
+                    if 10 < area_pixels < 100:  # Vehicle-sized object
+                        y_center = (y_coords.start + y_coords.stop) / 2
+                        x_center = (x_coords.start + x_coords.stop) / 2
+                        lon, lat = rasterio.transform.xy(src.transform, y_center, x_center)
+                        
+                        # Create a small buffer around the point to make it visible
+                        radius_deg = 0.0001  # Approximately 10-15 meters
+                        
+                        geojson = {
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [float(lon), float(lat)]
+                            },
+                            "properties": {
+                                "object_type": "vehicle",
+                                "area_pixels": int(area_pixels),
+                                "confidence": float(min(0.75, 0.5 + area_pixels / 200))
+                            }
+                        }
+                        
+                        detected_objects.append({
+                            "type": "vehicle",
+                            "geojson": geojson,
+                            "confidence": geojson["properties"]["confidence"],
+                            "area": float(area_pixels * 0.1),
+                        })
+            
+            # Calculate summary statistics
+            objects_by_type = {}
+            total_confidence = 0
+            for obj in detected_objects:
+                obj_type = obj["type"]
+                objects_by_type[obj_type] = objects_by_type.get(obj_type, 0) + 1
+                total_confidence += obj["confidence"]
+            
+            average_confidence = total_confidence / len(detected_objects) if detected_objects else 0
+            
+            return {
+                "detected_objects": detected_objects,
+                "total_objects": len(detected_objects),
+                "objects_by_type": objects_by_type,
+                "average_confidence": average_confidence,
+                "summary": {
+                    "oil_spills": objects_by_type.get("oil_spill", 0),
+                    "buildings": objects_by_type.get("building", 0),
+                    "vehicles": objects_by_type.get("vehicle", 0),
+                },
+            }
+
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Object identification error: {str(e)}")
+        return {
+            "detected_objects": [],
+            "total_objects": 0,
+            "objects_by_type": {},
+            "average_confidence": 0,
+            "summary": {},
+            "error": str(e),
+        }
