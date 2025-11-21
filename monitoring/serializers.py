@@ -13,6 +13,78 @@ from .models import (
 )
 
 
+class PipelineSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)
+    geojson_url = serializers.SerializerMethodField()
+    geojson_data = serializers.SerializerMethodField()
+    satellite_images_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Pipeline
+        fields = [
+            'id',
+            'user',
+            'name',
+            'description',
+            'geojson_file',
+            'geojson_url',
+            'geojson_data',
+            'status',
+            'length_km',
+            'satellite_images_count',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+    
+    def get_geojson_url(self, obj):
+        if obj.geojson_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.geojson_file.url)
+        return None
+    
+    def get_geojson_data(self, obj):
+        """Return parsed GeoJSON data"""
+        if obj.geojson_file:
+            try:
+                with obj.geojson_file.open('r') as f:
+                    return json.load(f)
+            except Exception:
+                return None
+        return None
+    
+    def get_satellite_images_count(self, obj):
+        return obj.satellite_images.count()
+
+
+class PipelineCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Pipeline
+        fields = [
+            'name',
+            'description',
+            'geojson_file',
+            'status',
+            'length_km',
+        ]
+        
+        
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'username',
+            'email',
+            'first_name',
+            'last_name',
+            'date_joined',
+        ]
+        read_only_fields = ['id', 'date_joined']
+
+
+
 class LegendCategorySerializer(serializers.ModelSerializer):
     category_type_display = serializers.CharField(
         source="get_category_type_display", read_only=True
@@ -99,43 +171,6 @@ class MappedObjectSerializer(serializers.ModelSerializer):
         return None
 
 
-class UserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ["id", "username", "email", "first_name", "last_name"]
-        read_only_fields = ["id"]
-
-
-class PipelineSerializer(serializers.ModelSerializer):
-    user = serializers.StringRelatedField(read_only=True)
-    satellite_images_count = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Pipeline
-        fields = [
-            "id",
-            "user",
-            "name",
-            "description",
-            "geojson_file",
-            "status",
-            "length_km",
-            "satellite_images_count",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = ["id", "user", "created_at", "updated_at"]
-
-    def get_satellite_images_count(self, obj):
-        return obj.satellite_images.count()
-
-
-class PipelineCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Pipeline
-        fields = ["name", "description", "geojson_file", "status", "length_km"]
-
-
 class SatelliteImageSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     pipeline_name = serializers.CharField(source="pipeline.name", read_only=True)
@@ -220,6 +255,62 @@ class SatelliteImageSerializer(serializers.ModelSerializer):
     def get_analyses_count(self, obj):
         return obj.analyses.count()
 
+    def _extract_features_from_geojson(self, geojson_data):
+        """Extract individual features from GeoJSON"""
+        features = []
+        
+        if not geojson_data:
+            return features
+            
+        if geojson_data.get("type") == "FeatureCollection":
+            features = geojson_data.get("features", [])
+        elif geojson_data.get("type") == "Feature":
+            features = [geojson_data]
+        elif geojson_data.get("type") in ["Point", "LineString", "Polygon", "MultiPoint", "MultiLineString", "MultiPolygon"]:
+            # Raw geometry
+            features = [{
+                "type": "Feature",
+                "geometry": geojson_data,
+                "properties": {}
+            }]
+        
+        return features
+
+    def _get_feature_centroid(self, feature):
+        """Extract centroid coordinates from a GeoJSON feature"""
+        try:
+            geometry = feature.get("geometry", {})
+            geom_type = geometry.get("type")
+            coordinates = geometry.get("coordinates", [])
+            
+            if geom_type == "Point":
+                return {"lon": coordinates[0], "lat": coordinates[1]}
+            elif geom_type == "Polygon":
+                # Calculate centroid of polygon
+                coords = coordinates[0] if coordinates else []
+                if coords:
+                    lon = sum(c[0] for c in coords) / len(coords)
+                    lat = sum(c[1] for c in coords) / len(coords)
+                    return {"lon": lon, "lat": lat}
+            elif geom_type == "LineString":
+                # Calculate midpoint
+                if coordinates:
+                    mid_idx = len(coordinates) // 2
+                    return {"lon": coordinates[mid_idx][0], "lat": coordinates[mid_idx][1]}
+            elif geom_type in ["MultiPoint", "MultiLineString", "MultiPolygon"]:
+                # Get first element's centroid
+                if coordinates and coordinates[0]:
+                    return self._get_feature_centroid({
+                        "geometry": {
+                            "type": geom_type.replace("Multi", ""),
+                            "coordinates": coordinates[0]
+                        }
+                    })
+        except Exception as e:
+            print(f"Error extracting centroid: {e}")
+        
+        return None
+
     def get_grouped_analysis_results(self, obj):
         """Get grouped analysis results by category"""
         analyses = obj.analyses.filter(status="completed")
@@ -242,7 +333,6 @@ class SatelliteImageSerializer(serializers.ModelSerializer):
                 is_resolved=False
             )
             
-            # Get all anomalies with locations
             spill_locations = []
             total_area = 0
             legends = set()
@@ -258,10 +348,7 @@ class SatelliteImageSerializer(serializers.ModelSerializer):
                 if anomaly.area_m2:
                     total_area += anomaly.area_m2
             
-            # Get mapped objects related to oil spills
-            oil_spill_objects = obj.mapped_objects.filter(
-                object_type="oil_spill"
-            )
+            oil_spill_objects = obj.mapped_objects.filter(object_type="oil_spill")
             
             for spill_obj in oil_spill_objects:
                 if spill_obj.legend_category:
@@ -302,10 +389,7 @@ class SatelliteImageSerializer(serializers.ModelSerializer):
                     "type": anomaly.anomaly_type,
                 })
             
-            # Get mapped objects related to encroachments
-            encroachment_objects = obj.mapped_objects.filter(
-                object_type="encroachment"
-            )
+            encroachment_objects = obj.mapped_objects.filter(object_type="encroachment")
             
             for enc_obj in encroachment_objects:
                 if enc_obj.legend_category:
@@ -325,40 +409,70 @@ class SatelliteImageSerializer(serializers.ModelSerializer):
                 "severity": self._get_highest_severity(encroachment_anomalies),
             }
 
-        # Process Object Detection
-        if object_detection_analyses.exists():
-            # Get all mapped objects for this image
-            detected_objects = obj.mapped_objects.all()
+        # Process Object Detection - IMPROVED TO COUNT ALL OBJECTS FROM GEOJSON
+        detected_objects = obj.mapped_objects.all()
+        
+        # Count objects by parsing GeoJSON files for accurate feature count
+        total_detected_features = 0
+        objects_by_type = {}
+        all_locations = []
+        legends = set()
+        
+        for obj_item in detected_objects:
+            # Try to get feature count from GeoJSON
+            feature_count = 1  # Default to 1 object
             
-            objects_by_type = {}
-            legends = set()
-            all_locations = []
+            if obj_item.geojson_file:
+                try:
+                    with obj_item.geojson_file.open("r") as f:
+                        geojson_data = json.load(f)
+                        features = self._extract_features_from_geojson(geojson_data)
+                        feature_count = len(features)
+                        
+                        # Extract locations from each feature
+                        for idx, feature in enumerate(features):
+                            centroid = self._get_feature_centroid(feature)
+                            if centroid:
+                                feature_name = feature.get("properties", {}).get("name", f"{obj_item.name} #{idx + 1}")
+                                all_locations.append({
+                                    "lat": centroid["lat"],
+                                    "lon": centroid["lon"],
+                                    "type": obj_item.get_object_type_display(),
+                                    "name": feature_name,
+                                })
+                except Exception as e:
+                    print(f"Error parsing GeoJSON for object {obj_item.id}: {e}")
+                    feature_count = 1
             
-            for obj_item in detected_objects:
-                obj_type = obj_item.object_type
-                if obj_type not in objects_by_type:
-                    objects_by_type[obj_type] = 0
-                objects_by_type[obj_type] += 1
-                
-                if obj_item.centroid_lat and obj_item.centroid_lon:
-                    all_locations.append({
-                        "lat": obj_item.centroid_lat,
-                        "lon": obj_item.centroid_lon,
-                        "type": obj_item.get_object_type_display(),
-                        "name": obj_item.name,
-                    })
-                
-                if obj_item.legend_category:
-                    legends.add(json.dumps({
-                        "name": obj_item.legend_category.name,
-                        "color": obj_item.legend_category.color,
-                        "icon": obj_item.legend_category.icon,
-                    }))
+            # If no GeoJSON, use stored centroid
+            if feature_count == 1 and obj_item.centroid_lat and obj_item.centroid_lon:
+                all_locations.append({
+                    "lat": obj_item.centroid_lat,
+                    "lon": obj_item.centroid_lon,
+                    "type": obj_item.get_object_type_display(),
+                    "name": obj_item.name,
+                })
             
+            # Count by type
+            obj_type = obj_item.object_type
+            if obj_type not in objects_by_type:
+                objects_by_type[obj_type] = 0
+            objects_by_type[obj_type] += feature_count
+            total_detected_features += feature_count
+            
+            # Collect legends
+            if obj_item.legend_category:
+                legends.add(json.dumps({
+                    "name": obj_item.legend_category.name,
+                    "color": obj_item.legend_category.color,
+                    "icon": obj_item.legend_category.icon,
+                }))
+        
+        if detected_objects.exists() or object_detection_analyses.exists():
             result["object_detection"] = {
                 "detected": detected_objects.exists(),
                 "date": obj.acquisition_date.isoformat(),
-                "total_objects": detected_objects.count(),
+                "total_objects": total_detected_features,  # Use accurate count
                 "objects_by_type": objects_by_type,
                 "locations": all_locations,
                 "legends": [json.loads(l) for l in legends],
